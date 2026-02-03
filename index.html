@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polarization Curve - Interactive Animation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .graph-wrapper {
+            background: rgba(15, 23, 42, 0.9);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 
+                0 25px 50px -12px rgba(0, 0, 0, 0.5),
+                0 0 0 1px rgba(255, 255, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        .graph-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .graph-header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            margin-bottom: 8px;
+        }
+
+        .graph-header p {
+            color: #64748b;
+            font-size: 0.95rem;
+        }
+
+        .graph-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16/10;
+            max-height: 500px;
+        }
+
+        .graph-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Axis styling */
+        .axis-line {
+            stroke: #475569;
+            stroke-width: 2;
+        }
+
+        .axis-arrow {
+            fill: #475569;
+        }
+
+        .grid-line {
+            stroke: rgba(71, 85, 105, 0.3);
+            stroke-width: 1;
+            stroke-dasharray: 4, 4;
+        }
+
+        .axis-label {
+            fill: #94a3b8;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .tick-label {
+            fill: #64748b;
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Curve styling */
+        .curve-ideal {
+            fill: none;
+            stroke: #22c55e;
+            stroke-width: 2;
+            stroke-dasharray: 8, 6;
+            opacity: 0.6;
+        }
+
+        .curve-actual {
+            fill: none;
+            stroke: url(#curveGradient);
+            stroke-width: 4;
+            stroke-linecap: round;
+            filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+        }
+
+        .curve-actual-bg {
+            fill: none;
+            stroke: rgba(59, 130, 246, 0.15);
+            stroke-width: 20;
+            stroke-linecap: round;
+        }
+
+        /* Region fills */
+        .region {
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .region.active {
+            opacity: 1;
+        }
+
+        .region-activation { fill: url(#activationGradient); }
+        .region-ohmic { fill: url(#ohmicGradient); }
+        .region-concentration { fill: url(#concentrationGradient); }
+
+        /* Moving point */
+        .data-point-glow {
+            fill: rgba(255, 255, 255, 0.3);
+            filter: blur(8px);
+        }
+
+        .data-point-outer {
+            fill: #3b82f6;
+            filter: drop-shadow(0 0 10px #3b82f6);
+        }
+
+        .data-point-inner {
+            fill: #ffffff;
+        }
+
+        /* Annotation boxes */
+        .annotation {
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+        }
+
+        .annotation.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .annotation-box {
+            fill: rgba(15, 23, 42, 0.95);
+            stroke: rgba(255, 255, 255, 0.1);
+            stroke-width: 1;
+            rx: 12;
+            filter: drop-shadow(0 10px 25px rgba(0, 0, 0, 0.4));
+        }
+
+        .annotation-title {
+            font-size: 13px;
+            font-weight: 600;
+            fill: #f1f5f9;
+        }
+
+        .annotation-text {
+            font-size: 11px;
+            fill: #94a3b8;
+        }
+
+        .annotation-formula {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .annotation-line {
+            stroke: rgba(255, 255, 255, 0.3);
+            stroke-width: 1;
+            stroke-dasharray: 4, 4;
+        }
+
+        .annotation-dot {
+            fill: #ffffff;
+            filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.5));
+        }
+
+        /* Color coding */
+        .color-activation { fill: #f97316; }
+        .color-ohmic { fill: #22c55e; }
+        .color-concentration { fill: #a855f7; }
+
+        /* Progress bar */
+        .progress-container {
+            margin-top: 24px;
+            padding: 0 10px;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: rgba(71, 85, 105, 0.3);
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f97316, #22c55e, #a855f7);
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        .progress-markers {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 12px;
+            padding: 0 2px;
+        }
+
+        .marker {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .marker-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid #1e293b;
+            transition: all 0.3s ease;
+        }
+
+        .marker-dot.activation { background: #f97316; }
+        .marker-dot.ohmic { background: #22c55e; }
+        .marker-dot.concentration { background: #a855f7; }
+
+        .marker-dot.active {
+            transform: scale(1.3);
+            box-shadow: 0 0 15px currentColor;
+        }
+
+        .marker-label {
+            font-size: 11px;
+            color: #64748b;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .marker.active .marker-label {
+            color: #f1f5f9;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 10px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+        }
+
+        .btn-secondary {
+            background: rgba(71, 85, 105, 0.3);
+            color: #cbd5e1;
+            border: 1px solid rgba(71, 85, 105, 0.5);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(71, 85, 105, 0.5);
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+
+        .legend-line {
+            width: 24px;
+            height: 3px;
+            border-radius: 2px;
+        }
+
+        .legend-line.ideal {
+            background: #22c55e;
+            background: repeating-linear-gradient(90deg, #22c55e, #22c55e 8px, transparent 8px, transparent 14px);
+        }
+
+        .legend-line.actual {
+            background: linear-gradient(90deg, #f97316, #22c55e, #a855f7);
+        }
+
+        /* Current info display */
+        .info-display {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 20px;
+            padding: 16px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 12px;
+        }
+
+        .info-item {
+            text-align: center;
+        }
+
+        .info-label {
+            font-size: 0.75rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .info-value.activation { color: #f97316; }
+        .info-value.ohmic { color: #22c55e; }
+        .info-value.concentration { color: #a855f7; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .graph-wrapper {
+                padding: 20px;
+            }
+            
+            .graph-header h1 {
+                font-size: 1.3rem;
+            }
+
+            .info-display {
+                gap: 20px;
+            }
+
+            .legend {
+                gap: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="graph-wrapper">
+        <div class="graph-header">
+            <h1>📈 Electrode Polarization Curve</h1>
+            <p>Interactive visualization of overpotential vs current density</p>
+        </div>
+
+        <div class="graph-container">
+            <svg class="graph-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                    <!-- Curve gradient -->
+                    <linearGradient id="curveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#f97316"/>
+                        <stop offset="25%" stop-color="#f97316"/>
+                        <stop offset="40%" stop-color="#22c55e"/>
+                        <stop offset="70%" stop-color="#22c55e"/>
+                        <stop offset="85%" stop-color="#a855f7"/>
+                        <stop offset="100%" stop-color="#a855f7"/>
+                    </linearGradient>
+
+                    <!-- Region gradients -->
+                    <linearGradient id="activationGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#f97316" stop-opacity="0.25"/>
+                        <stop offset="100%" stop-color="#f97316" stop-opacity="0.05"/>
+                    </linearGradient>
+                    <linearGradient id="ohmicGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#22c55e" stop-opacity="0.2"/>
+                        <stop offset="100%" stop-color="#22c55e" stop-opacity="0.03"/>
+                    </linearGradient>
+                    <linearGradient id="concentrationGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#a855f7" stop-opacity="0.25"/>
+                        <stop offset="100%" stop-color="#a855f7" stop-opacity="0.05"/>
+                    </linearGradient>
+
+                    <!-- Glow filter -->
+                    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                        <feMerge>
+                            <feMergeNode in="coloredBlur"/>
+                            <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                    </filter>
+                </defs>
+
+                <!-- Grid lines -->
+                <g class="grid">
+                    <line class="grid-line" x1="100" y1="100" x2="750" y2="100"/>
+                    <line class="grid-line" x1="100" y1="175" x2="750" y2="175"/>
+                    <line class="grid-line" x1="100" y1="250" x2="750" y2="250"/>
+                    <line class="grid-line" x1="100" y1="325" x2="750" y2="325"/>
+                    <line class="grid-line" x1="200" y1="50" x2="200" y2="400"/>
+                    <line class="grid-line" x1="350" y1="50" x2="350" y2="400"/>
+                    <line class="grid-line" x1="500" y1="50" x2="500" y2="400"/>
+                    <line class="grid-line" x1="650" y1="50" x2="650" y2="400"/>
+                </g>
+
+                <!-- Region highlights -->
+                <g class="regions">
+                    <path class="region region-activation" id="regionActivation" 
+                          d="M 100,400 L 100,350 Q 140,280 200,250 L 200,400 Z"/>
+                    <path class="region region-ohmic" id="regionOhmic"
+                          d="M 200,400 L 200,250 L 550,100 L 550,400 Z"/>
+                    <path class="region region-concentration" id="regionConcentration"
+                          d="M 550,400 L 550,100 Q 650,70 750,60 L 750,400 Z"/>
+                </g>
+
+                <!-- Axes -->
+                <line class="axis-line" x1="100" y1="400" x2="760" y2="400"/>
+                <line class="axis-line" x1="100" y1="410" x2="100" y2="40"/>
+                
+                <!-- Axis arrows -->
+                <polygon class="axis-arrow" points="760,400 745,394 745,406"/>
+                <polygon class="axis-arrow" points="100,40 94,55 106,55"/>
+
+                <!-- Axis labels -->
+                <text class="axis-label" x="420" y="450">Current Density (i) → mA/cm²</text>
+                <text class="axis-label" x="45" y="220" transform="rotate(-90, 45, 220)">Overpotential (η) → mV</text>
+
+                <!-- Tick marks and labels -->
+                <g class="ticks">
+                    <line x1="200" y1="400" x2="200" y2="408" stroke="#475569" stroke-width="2"/>
+                    <text class="tick-label" x="200" y="425" text-anchor="middle">10</text>
+                    
+                    <line x1="350" y1="400" x2="350" y2="408" stroke="#475569" stroke-width="2"/>
+                    <text class="tick-label" x="350" y="425" text-anchor="middle">50</text>
+                    
+                    <line x1="500" y1="400" x2="500" y2="408" stroke="#475569" stroke-width="2"/>
+                    <text class="tick-label" x="500" y="425" text-anchor="middle">100</text>
+                    
+                    <line x1="650" y1="400" x2="650" y2="408" stroke="#475569" stroke-width="2"/>
+                    <text class="tick-label" x="650" y="425" text-anchor="middle">200</text>
+
+                    <line x1="92" y1="325" x2="100" y2="325" stroke="#475569" stroke-width="2"/>
+                    <text class="tick-label" x="85" y="329" text-anchor="end">100</text>
+                    
+                    <line x1="92" y1="250" x2="100" y2="250" stroke="#475569" stroke-width="2"/>
+                    <text class="tick-label" x="85" y="254" text-anchor="end">200</text>
+                    
+                    <line x1="92" y1="175" x2="100" y2="175" stroke="#475569" stroke-width="2"/>
+                    <text class="tick-label" x="85" y="179" text-anchor="end">300</text>
+                    
+                    <line x1="92" y1="100" x2="100" y2="100" stroke="#475569" stroke-width="2"/>
+                    <text class="tick-label" x="85" y="104" text-anchor="end">400</text>
+                </g>
+
+                <!-- Ideal line (no polarization) -->
+                <line class="curve-ideal" x1="100" y1="400" x2="750" y2="50"/>
+
+                <!-- Actual polarization curve background glow -->
+                <path class="curve-actual-bg" 
+                      d="M 100,400 
+                         Q 130,380 150,350 
+                         Q 180,300 200,250 
+                         L 550,100 
+                         Q 620,75 680,65
+                         Q 720,58 750,55"/>
+
+                <!-- Actual polarization curve -->
+                <path class="curve-actual" id="actualCurve"
+                      d="M 100,400 
+                         Q 130,380 150,350 
+                         Q 180,300 200,250 
+                         L 550,100 
+                         Q 620,75 680,65
+                         Q 720,58 750,55"/>
+
+                <!-- Overpotential indicator line -->
+                <g id="overpotentialIndicator" opacity="0">
+                    <line x1="400" y1="160" x2="400" y2="260" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4"/>
+                    <text x="415" y="215" fill="#ef4444" font-size="14" font-weight="600">η</text>
+                </g>
+
+                <!-- Moving data point -->
+                <g id="dataPoint" transform="translate(100, 400)">
+                    <circle class="data-point-glow" r="20"/>
+                    <circle class="data-point-outer" r="10"/>
+                    <circle class="data-point-inner" r="4"/>
+                </g>
+
+                <!-- Annotation: Activation Region -->
+                <g class="annotation" id="annotationActivation">
+                    <line class="annotation-line" x1="150" y1="300" x2="150" y2="180"/>
+                    <circle class="annotation-dot" cx="150" cy="300" r="4"/>
+                    <rect class="annotation-box" x="60" y="80" width="200" height="95"/>
+                    <rect x="60" y="80" width="200" height="4" rx="2" fill="#f97316"/>
+                    <text class="annotation-title color-activation" x="80" y="105">⚡ Activation Region</text>
+                    <text class="annotation-text" x="80" y="125">Charge transfer kinetics</text>
+                    <text class="annotation-text" x="80" y="142">dominate at low currents</text>
+                    <text class="annotation-formula color-activation" x="80" y="165">η = a + b·log(i)</text>
+                </g>
+
+                <!-- Annotation: Ohmic Region -->
+                <g class="annotation" id="annotationOhmic">
+                    <line class="annotation-line" x1="375" y1="175" x2="450" y2="120"/>
+                    <circle class="annotation-dot" cx="375" cy="175" r="4"/>
+                    <rect class="annotation-box" x="420" y="50" width="220" height="95"/>
+                    <rect x="420" y="50" width="220" height="4" rx="2" fill="#22c55e"/>
+                    <text class="annotation-title color-ohmic" x="440" y="75">Ω Ohmic (Linear) Region</text>
+                    <text class="annotation-text" x="440" y="95">IR drop from electrolyte</text>
+                    <text class="annotation-text" x="440" y="112">and contact resistance</text>
+                    <text class="annotation-formula color-ohmic" x="440" y="135">η = I × R</text>
+                </g>
+
+                <!-- Annotation: Concentration Region -->
+                <g class="annotation" id="annotationConcentration">
+                    <line class="annotation-line" x1="650" y1="68" x2="580" y2="200"/>
+                    <circle class="annotation-dot" cx="650" cy="68" r="4"/>
+                    <rect class="annotation-box" x="480" y="200" width="230" height="110"/>
+                    <rect x="480" y="200" width="230" height="4" rx="2" fill="#a855f7"/>
+                    <text class="annotation-title color-concentration" x="500" y="225">🔄 Concentration Region</text>
+                    <text class="annotation-text" x="500" y="245">Mass transport limited</text>
+                    <text class="annotation-text" x="500" y="262">Approaching limiting current</text>
+                    <text class="annotation-formula color-concentration" x="500" y="285">η = (RT/nF)·ln(1-i/i</text>
+                    <text class="annotation-formula color-concentration" x="692" y="285" font-size="9">L</text>
+                    <text class="annotation-formula color-concentration" x="700" y="285">)</text>
+                </g>
+
+                <!-- Start point marker -->
+                <g id="startMarker">
+                    <circle cx="100" cy="400" r="8" fill="none" stroke="#64748b" stroke-width="2"/>
+                    <text x="110" y="420" fill="#64748b" font-size="11">E₀ (equilibrium)</text>
+                </g>
+
+            </svg>
+        </div>
+
+        <div class="info-display">
+            <div class="info-item">
+                <div class="info-label">Current Region</div>
+                <div class="info-value" id="currentRegion">Starting...</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Current (i)</div>
+                <div class="info-value" id="currentValue">0 mA/cm²</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Overpotential (η)</div>
+                <div class="info-value" id="overpotentialValue">0 mV</div>
+            </div>
+        </div>
+
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-markers">
+                <div class="marker" id="markerActivation">
+                    <div class="marker-dot activation"></div>
+                    <span class="marker-label">Activation</span>
+                </div>
+                <div class="marker" id="markerOhmic">
+                    <div class="marker-dot ohmic"></div>
+                    <span class="marker-label">Ohmic</span>
+                </div>
+                <div class="marker" id="markerConcentration">
+                    <div class="marker-dot concentration"></div>
+                    <span class="marker-label">Concentration</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-primary" id="playPauseBtn">
+                <span id="playPauseIcon">▶</span>
+                <span id="playPauseText">Play</span>
+            </button>
+            <button class="btn btn-secondary" id="resetBtn">↻ Reset</button>
+            <button class="btn btn-secondary" id="speedBtn">1x Speed</button>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <span class="legend-line ideal"></span>
+                <span>Ideal (No losses)</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-line actual"></span>
+                <span>Actual Polarization</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Animation configuration
+        const config = {
+            duration: 12000, // Total animation duration in ms
+            regions: {
+                activation: { start: 0, end: 0.18, color: '#f97316' },
+                ohmic: { start: 0.18, end: 0.72, color: '#22c55e' },
+                concentration: { start: 0.72, end: 1, color: '#a855f7' }
+            }
+        };
+
+        // Path data points (approximating the curve)
+        const curvePath = [
+            { x: 100, y: 400, i: 0, eta: 0 },
+            { x: 120, y: 385, i: 3, eta: 20 },
+            { x: 140, y: 360, i: 6, eta: 53 },
+            { x: 160, y: 330, i: 9, eta: 93 },
+            { x: 180, y: 290, i: 12, eta: 147 },
+            { x: 200, y: 250, i: 15, eta: 200 },
+            { x: 280, y: 205, i: 35, eta: 260 },
+            { x: 350, y: 168, i: 55, eta: 309 },
+            { x: 420, y: 140, i: 75, eta: 347 },
+            { x: 500, y: 115, i: 100, eta: 380 },
+            { x: 550, y: 100, i: 120, eta: 400 },
+            { x: 600, y: 85, i: 145, eta: 420 },
+            { x: 650, y: 70, i: 175, eta: 440 },
+            { x: 700, y: 62, i: 195, eta: 451 },
+            { x: 750, y: 55, i: 220, eta: 460 }
+        ];
+
+        // DOM elements
+        const dataPoint = document.getElementById('dataPoint');
+        const progressFill = document.getElementById('progressFill');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const playPauseIcon = document.getElementById('playPauseIcon');
+        const playPauseText = document.getElementById('playPauseText');
+        const resetBtn = document.getElementById('resetBtn');
+        const speedBtn = document.getElementById('speedBtn');
+        const currentRegion = document.getElementById('currentRegion');
+        const currentValue = document.getElementById('currentValue');
+        const overpotentialValue = document.getElementById('overpotentialValue');
+
+        const annotationActivation = document.getElementById('annotationActivation');
+        const annotationOhmic = document.getElementById('annotationOhmic');
+        const annotationConcentration = document.getElementById('annotationConcentration');
+
+        const regionActivation = document.getElementById('regionActivation');
+        const regionOhmic = document.getElementById('regionOhmic');
+        const regionConcentration = document.getElementById('regionConcentration');
+
+        const markerActivation = document.getElementById('markerActivation');
+        const markerOhmic = document.getElementById('markerOhmic');
+        const markerConcentration = document.getElementById('markerConcentration');
+
+        const overpotentialIndicator = document.getElementById('overpotentialIndicator');
+
+        // Animation state
+        let isPlaying = false;
+        let animationId = null;
+        let startTime = null;
+        let pausedAt = 0;
+        let speedMultiplier = 1;
+        const speeds = [1, 1.5, 2, 0.5];
+        let speedIndex = 0;
+
+        // Interpolate position along curve
+        function getPositionAtProgress(progress) {
+            const totalPoints = curvePath.length - 1;
+            const exactIndex = progress * totalPoints;
+            const lowerIndex = Math.floor(exactIndex);
+            const upperIndex = Math.min(lowerIndex + 1, totalPoints);
+            const localProgress = exactIndex - lowerIndex;
+
+            const lower = curvePath[lowerIndex];
+            const upper = curvePath[upperIndex];
+
+            return {
+                x: lower.x + (upper.x - lower.x) * localProgress,
+                y: lower.y + (upper.y - lower.y) * localProgress,
+                i: lower.i + (upper.i - lower.i) * localProgress,
+                eta: lower.eta + (upper.eta - lower.eta) * localProgress
+            };
+        }
+
+        // Get current region based on progress
+        function getCurrentRegion(progress) {
+            if (progress < config.regions.activation.end) return 'activation';
+            if (progress < config.regions.concentration.start) return 'ohmic';
+            return 'concentration';
+        }
+
+        // Update UI based on progress
+        function updateUI(progress) {
+            const pos = getPositionAtProgress(progress);
+            const region = getCurrentRegion(progress);
+
+            // Move data point
+            dataPoint.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+
+            // Update progress bar
+            progressFill.style.width = `${progress * 100}%`;
+
+            // Update info display
+            currentValue.textContent = `${pos.i.toFixed(1)} mA/cm²`;
+            overpotentialValue.textContent = `${pos.eta.toFixed(0)} mV`;
+
+            // Update region display
+            currentRegion.textContent = region.charAt(0).toUpperCase() + region.slice(1);
+            currentRegion.className = 'info-value ' + region;
+
+            // Update region highlights
+            regionActivation.classList.toggle('active', region === 'activation');
+            regionOhmic.classList.toggle('active', region === 'ohmic');
+            regionConcentration.classList.toggle('active', region === 'concentration');
+
+            // Update markers
+            markerActivation.classList.toggle('active', region === 'activation');
+            markerOhmic.classList.toggle('active', region === 'ohmic');
+            markerConcentration.classList.toggle('active', region === 'concentration');
+
+            markerActivation.querySelector('.marker-dot').classList.toggle('active', region === 'activation');
+            markerOhmic.querySelector('.marker-dot').classList.toggle('active', region === 'ohmic');
+            markerConcentration.querySelector('.marker-dot').classList.toggle('active', region === 'concentration');
+
+            // Show/hide annotations based on region
+            const activationRange = progress >= 0.05 && progress < 0.25;
+            const ohmicRange = progress >= 0.35 && progress < 0.65;
+            const concentrationRange = progress >= 0.78;
+
+            annotationActivation.classList.toggle('visible', activationRange);
+            annotationOhmic.classList.toggle('visible', ohmicRange);
+            annotationConcentration.classList.toggle('visible', concentrationRange);
+
+            // Show overpotential indicator in ohmic region
+            overpotentialIndicator.setAttribute('opacity', ohmicRange ? '1' : '0');
+        }
+
+        // Animation loop
+        function animate(timestamp) {
+            if (!startTime) startTime = timestamp;
+            
+            const elapsed = (timestamp - startTime) * speedMultiplier + pausedAt;
+            const progress = Math.min(elapsed / config.duration, 1);
+
+            updateUI(progress);
+
+            if (progress < 1 && isPlaying) {
+                animationId = requestAnimationFrame(animate);
+            } else if (progress >= 1) {
+                isPlaying = false;
+                playPauseIcon.textContent = '↻';
+                playPauseText.textContent = 'Replay';
+            }
+        }
+
+        // Play/Pause toggle
+        function togglePlayPause() {
+            if (!isPlaying) {
+                // Check if animation completed
+                const currentProgress = pausedAt / config.duration;
+                if (currentProgress >= 1) {
+                    // Reset and play
+                    pausedAt = 0;
+                }
+                
+                isPlaying = true;
+                startTime = null;
+                playPauseIcon.textContent = '⏸';
+                playPauseText.textContent = 'Pause';
+                animationId = requestAnimationFrame(animate);
+            } else {
+                isPlaying = false;
+                pausedAt = (performance.now() - startTime) * speedMultiplier + pausedAt;
+                startTime = null;
+                playPauseIcon.textContent = '▶';
+                playPauseText.textContent = 'Play';
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                }
+            }
+        }
+
+        // Reset animation
+        function resetAnimation() {
+            isPlaying = false;
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            startTime = null;
+            pausedAt = 0;
+            playPauseIcon.textContent = '▶';
+            playPauseText.textContent = 'Play';
+            
+            // Reset UI
+            updateUI(0);
+            annotationActivation.classList.remove('visible');
+            annotationOhmic.classList.remove('visible');
+            annotationConcentration.classList.remove('visible');
+        }
+
+        // Change speed
+        function changeSpeed() {
+            // Save current progress
+            if (isPlaying) {
+                pausedAt = (performance.now() - startTime) * speedMultiplier + pausedAt;
+                startTime = performance.now();
+            }
+            
+            speedIndex = (speedIndex + 1) % speeds.length;
+            speedMultiplier = speeds[speedIndex];
+            speedBtn.textContent = `${speedMultiplier}x Speed`;
+        }
+
+        // Event listeners
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        resetBtn.addEventListener('click', resetAnimation);
+        speedBtn.addEventListener('click', changeSpeed);
+
+        // Initialize
+        updateUI(0);
+    </script>
+</body>
+</html>
